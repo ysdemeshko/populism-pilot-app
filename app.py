@@ -30,6 +30,7 @@ LOG_COLUMNS = [
     "user_r1", "ai_r1",
     "user_r2", "ai_r2",
     "user_r3", "ai_r3",
+    "flags_all",
 ]
 
 # Create file with header if missing
@@ -100,18 +101,13 @@ try:
     ws = sh.worksheet(GSHEETS_WORKSHEET)
 except gspread.exceptions.WorksheetNotFound:
     ws = sh.add_worksheet(title=GSHEETS_WORKSHEET, rows="1", cols=str(len(LOG_COLUMNS)))
-    # write header row to the sheet
     ws.append_row(LOG_COLUMNS, value_input_option="RAW")
 
 # Helper to append one conversation row to Google Sheets
 def append_convo_to_gsheet(row_dict: dict):
     """Append a single conversation row (dict) to the Google Sheet."""
-    # Keep column order aligned with LOG_COLUMNS
     values = [row_dict.get(k, "") for k in LOG_COLUMNS]
     try:
-        # If the worksheet is new and empty (only headers), ensure headers exist
-        if ws.row_count == 1:
-            ws.append_row(LOG_COLUMNS, value_input_option="RAW")
         ws.append_row(values, value_input_option="RAW")
         return True
     except Exception as e:
@@ -447,11 +443,9 @@ def log_event(role, content, meta=None):
     if role == "assistant" and round_no == 3:
         st.session_state.convo_row["ts_iso_end"] = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime())
         row = {k: st.session_state.convo_row.get(k, "") for k in LOG_COLUMNS}
-
-    # 1) Local CSV (optional but useful as a backup)
-        safe_append_csv(str(MASTER_LOG_PATH), row, LOG_COLUMNS)
-
-    # 2) Google Sheets
+    # local CSV (optional)
+    # if WRITE_LOCAL_CSV: safe_append_csv(str(MASTER_LOG_PATH), row, LOG_COLUMNS)
+    # Google Sheets (persistent)
         append_convo_to_gsheet(row)
 
 
