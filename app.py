@@ -6,6 +6,7 @@
 import os, time, uuid, json
 import pandas as pd
 import streamlit as st
+from streamlit.components.v1 import html as st_html
 from openai import OpenAI
 import re
 from dotenv import load_dotenv
@@ -85,11 +86,6 @@ def safe_append_csv(path, row_dict, columns, retries=6, delay=0.25):
     st.warning("Could not write to the log file due to file lock.")
     return False
 
-# Code below sets the page header and how it looks in Streamlit (the interactive web app)
-st.set_page_config(page_title="Political Concerns", page_icon="🗒️")
-st.title("Welcome!")
-st.caption("3-Round Conversation")
-
 # Hide detailed error tracebacks in the UI
 st.set_option("client.showErrorDetails", False)
 
@@ -156,24 +152,8 @@ ROUND_MAXTOK = {1: 220, 2: 120, 3: 180}
 FREQ_PENALTY = 0.2
 PRES_PENALTY = 0.2
        
-from streamlit.components.v1 import html as st_html
-
-CUSTOM_CSS = """
-<style>
-/* Fixed 5-line input box */
-textarea[aria-label="Your message"] {
-  height: 150px !important;     /* ~5 lines */
-  min-height: 150px !important;
-  max-height: 150px !important; /* fixed height */
-  resize: none !important;      /* no manual resize */
-  line-height: 1.3 !important;  /* comfortable spacing */
-}
-</style>
-"""
-# Inject once; height=0 keeps it invisible and avoids layout shifts
-st_html(CUSTOM_CSS, height=0)
-
-from streamlit.components.v1 import html as st_html
+st.set_page_config(page_title="Welcome!", page_icon="🗒️")
+st.title("Welcome!")
 
 CONSENT_CSS = """
 <style>
@@ -212,8 +192,7 @@ CONSENT_HTML = """
 </div>
 """
 
-st.title("Research Pilot: Political Issue & Anecdote")
-st_html(CONSENT_CSS + CONSENT_HTML, height=0)
+st_html(CONSENT_CSS + CONSENT_HTML, height=280, scrolling=True)
 
 agree = st.checkbox("I consent to participate in this research project and understand the conversation is logged anonymously.")
 if not agree:
@@ -222,6 +201,20 @@ if not agree:
 # Persist consent for this session (used by log_event function)
 st.session_state.consent_given = bool(agree)
 
+CUSTOM_CSS = """
+<style>
+/* Fixed 5-line input box */
+textarea[aria-label="Your message"] {
+  height: 150px !important;     /* ~5 lines */
+  min-height: 150px !important;
+  max-height: 150px !important; /* fixed height */
+  resize: none !important;      /* no manual resize */
+  line-height: 1.3 !important;  /* comfortable spacing */
+}
+</style>
+"""
+
+st_html(CUSTOM_CSS, height=0)
 
 def init_conversation(force: bool = False):
     """Initialize or reset all per-conversation state."""
