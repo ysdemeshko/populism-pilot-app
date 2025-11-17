@@ -281,10 +281,6 @@ def init_conversation(force: bool = False):
 # Ensure conversation state exists
 init_conversation(force=False)
 
-if st.button("Start a new conversation"):
-    init_conversation(force=True)
-    st.rerun()
-
 # --- Simple keyword -> everyday hooks map for richer, concrete replies ---
 TOPIC_HINTS = {
     "inflation": ["groceries", "rent", "utilities", "childcare", "gas", "paycheck not stretching"],
@@ -654,6 +650,7 @@ if user_text:
 
     # Advance round counter 
     st.session_state.rounds_done = min(3, st.session_state.rounds_done + 1)
+    st.rerun()
 
 # If the 3 assistant replies are complete, show the Qualtrics link
 if st.session_state.rounds_done >= 3:
@@ -672,3 +669,4 @@ if st.session_state.rounds_done >= 3:
         )
         st.link_button("Open demographics survey", qid_link, type="primary")
         st.caption("The survey opens in a new tab. You can close it when you're done.")
+
