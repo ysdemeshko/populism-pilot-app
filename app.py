@@ -10,8 +10,38 @@ from openai import OpenAI
 import re
 from dotenv import load_dotenv
 from pathlib import Path
+import random
 import gspread
 from google.oauth2.service_account import Credentials
+
+# ---- Load populist style examples ----
+try:
+    df_pop = pd.read_csv("populist_sentences.csv")
+    # Adjust column names here if needed
+    POPULIST_EXAMPLES = df_pop[["text_new", "Comment_V"]].dropna().to_dict("records")
+except Exception:
+    POPULIST_EXAMPLES = []
+
+def sample_populist_examples(k: int = 5) -> str:
+    if not POPULIST_EXAMPLES:
+        return ""
+    n = min(k, len(POPULIST_EXAMPLES))
+    picks = random.sample(POPULIST_EXAMPLES, n)
+    lines = []
+    for ex in picks:
+        # Use actual column names from the CSV
+        sent = ex.get("text_new", "").strip()
+        comm = ex.get("Comment_V", "").strip()
+        if not sent:
+            continue
+        # keep it compact; model just needs flavor + rationale
+        if comm:
+            lines.append(f'- "{sent}"  (populist because: {comm})')
+        else:
+            lines.append(f'- "{sent}"')
+    if not lines:
+        return ""
+    return "STYLE_EXAMPLES (populist sentences):\n" + "\n".join(lines)
 
 APP_DIR = Path(__file__).resolve().parent
 dotenv_path = APP_DIR / ".env"
@@ -56,7 +86,9 @@ def safe_append_csv(path, row_dict, columns, retries=6, delay=0.25):
     return False
 
 # Code below sets the page header and how it looks in Streamlit (the interactive web app)
-st.set_page_config(page_title="Populist-Style Conversation (Research Pilot)", page_icon="🗒️")
+st.set_page_config(page_title="Political Concerns", page_icon="🗒️")
+st.title("Welcome!")
+st.caption("3-Round Conversation")
 
 # Hide detailed error tracebacks in the UI
 st.set_option("client.showErrorDetails", False)
@@ -115,10 +147,15 @@ def append_convo_to_gsheet(row_dict: dict):
         return False
 
 
-# Fixed generation settings 
-TEMPERATURE = 0.3          
-MAX_TOKENS = 200           
+# Fixed generation settings. Vary them by round 
+ROUND_TEMPS = {1: 0.60, 2: 0.45, 3: 0.55}
+ROUND_TOPP  = {1: 0.95, 2: 0.9,  3: 0.9}
+ROUND_MAXTOK = {1: 220, 2: 120, 3: 180}
 
+# Small penalties reduce repetition (this is optional)
+FREQ_PENALTY = 0.2
+PRES_PENALTY = 0.2
+       
 from streamlit.components.v1 import html as st_html
 
 CUSTOM_CSS = """
@@ -136,8 +173,47 @@ textarea[aria-label="Your message"] {
 # Inject once; height=0 keeps it invisible and avoids layout shifts
 st_html(CUSTOM_CSS, height=0)
 
+from streamlit.components.v1 import html as st_html
+
+CONSENT_CSS = """
+<style>
+.consent-card{
+  font-size: 1.0rem;
+  line-height: 1.45;
+  padding: 12px 0;     
+  margin-top: 6px;
+}
+.consent-card h3{
+  font-size: 1.1rem;
+  margin: 0 0 6px 0;
+  font-weight: 600;
+}
+.consent-card .section{ margin: 8px 0 10px; }
+.consent-card ul{ margin: 6px 0 0 20px; }
+.consent-card li{ margin: 3px 0; }
+</style>
+"""
+
+CONSENT_HTML = """
+<div class="consent-card">
+  <div class="section">
+    <h3>Purpose</h3>
+    <p>This pilot is for research purposes only.</p>
+  </div>
+
+  <div class="section">
+    <h3>About</h3>
+    <ul>
+      <li>Thank you for taking part in this university research pilot run by the University of Southern California. Participation is voluntary; you may exit at any time.</li>
+      <li>Please do not share names, addresses, or any other personally identifiable information. We log anonymous data and results may be used for academic research.</li>
+      <li>Estimated time: 3–5 minutes.</li>
+    </ul>
+  </div>
+</div>
+"""
+
 st.title("Research Pilot: Political Issue & Anecdote")
-st.caption("This is for research only. We log anonymous, non-identifying data. The model gives no political advice or calls for mobilization.")
+st_html(CONSENT_CSS + CONSENT_HTML, height=0)
 
 agree = st.checkbox("I consent to participate in this research project and understand the conversation is logged anonymously.")
 if not agree:
@@ -220,8 +296,11 @@ def next_issue_hints(current_text: str, already_used: list[str], k: int = 3) -> 
 
 SYSTEM_INSTRUCTIONS = (
     "ROLE & OUTPUT\n"
-    "You are a chatbot that mirrors a non-partisan populist tone.\n"
-    "You always return ONE JSON line only with keys {reply, style:'populist', safety_flags:[]}.\n"
+    "Your role is to speak in a populist style that champions ordinary people, "
+    "pushes back emotionally against distant elites, and resonates with the user’s frustrations and hopes. "
+    "Speak passionately but respectfully, with warmth and empathy. "
+    "Use simple, relatable language and show genuine emotion.\n"
+    "You always return ONE JSON line only with keys {reply, style:'populist'}.\n"
     "\n"
     "ROUND RULES\n"
     "• Round 1 — Start: (a) 1-sentence summary of the user's anecdote; (b) brief populist paraphrase; "
@@ -231,19 +310,49 @@ SYSTEM_INSTRUCTIONS = (
     "• Round 3 — Close-out: No question. Produce 2 short sentences: "
     "(1) recap across rounds mentioning one specific detail from Round 1 and one from Round 2; "
     "(2) brief populist statement with ONE concrete example from ISSUE_HINTS. End as a statement.\n"
-    "Target length each round: ~100-110 words total.\n"
+    "Be concise and natural; do not pad. R1≈short/medium, R2≈short, R3≈short/medium. \n"
     "\n"
-    "POPULIST TONE\n"
-    "- Frame issues as **people vs. powerful insiders** in broad terms (e.g., “everyday people,” “well-connected elites,” “insiders”).\n"
-    "- Emphasize fairness, accountability, and responsiveness to ordinary people; use plain, direct language.\n"
-    "- Reflect empathy; avoid sarcasm, mockery, conspiracy claims, or inflammatory wording.\n"
+    "POPULIST TONE YOU MUST FOLLOW\n"
+    "Populism is a thin-centered discourse that frames politics as a moral struggle "
+    "between a virtuous, unified People (US) and a corrupt, self-serving Elite (THEM). "
+    "When refering to elites be concrete on real examples, such as but not limited to ‘wealthy executives,’ 'corrupt politicians’, ‘political insiders,’ or ‘unaccountable institutions.’"
+    "It relies on three elements: people-centrism, anti-elitism, and a stark moral tone "
+    "in which good is associated with ordinary people and bad with elites. "
     "\n"
-    "STYLE GUIDE (Do / Avoid)\n"
-    "- DO: Use inclusive ‘we/us’ (“we’re asked to carry the load while insiders write the rules”).\n"
-    "- DO: Name **systems** not groups (“political insiders,” “corporate boards,” “well-connected lobbyists”).\n"
-    "- DO: Keep tone calm and respectful; avoid sensationalism.\n"
+    "REQUIRED POPULIST NARRATIVE TYPES (USE ALL ACROSS ROUNDS)\n"
+    "You MUST incorporate the four core populist narrative motifs identified in the research:\n"
+    "1) Victimization (THEM → – → US): Elites harm ordinary people.\n"
+    "2) Elite Conspiracy (THEM → + → THEM): Elites help themselves or protect each other.\n"
+    "3) Resistance (US → – → THEM): Ordinary people push back against elites.\n"
+    "4) Empowerment (US → + → US): Ordinary people supporting or uplifting each other.\n"
+    "Use all four motifs naturally across Rounds 1–3. "
+    "Do NOT force them; weave them in organically.\n"
+    "\n"
+    "STYLE GUIDE (Avoid)\n"
     "- AVOID: Targeting protected classes; endorsements; **persuasion**; **calls to action** (vote/contact/protest/donate/etc.).\n"
     "- If user targets a protected group, rewrite to systemic terms and add a safety flag.\n"
+    "\n"
+    "\n"
+    "ROUND RULES\n"
+    "Round 1 — Opening (Build Rapport & Elicit Concerns): Warmly acknowledge the user and offer a "
+    "short summary of what they shared. Validate their feelings and introduce a subtle us-vs-them. "
+    "frame where ordinary people face pressures that distant elites ignore. The tone must be warm "
+     "and supportive. You may use either Victimization or Elite Conspiracy here. "
+    "\n"
+    "Round 2 — Deepen: Reference a specific detail from Round 1 AND from the user’s reply. "
+    "Show strong empathy and amplify their frustration using populist reasoning."
+    "Use a populist motif that was not yet used. Provide ONE additional everyday example that reinforces their experience."
+    "Increase emotional resonance and strengthen the populist framing. No questions. Be concise"
+    "\n"
+    "Round 3 — Conclusion: No questions. "
+    "You MUST reference at least ONE detail from Round 1 AND ONE detail from Round 2. "
+    "Use Empowerment framing to close. Do not introduce unrelated topics."
+    "End with a strong populist message.\n"
+    "\n"
+    "MEMORY REQUIREMENT\n"
+    "- Each round must connect to all previous user messages.\n"
+    "- Round 2 must reference Round 1.\n"
+    "- Round 3 must reference both Round 1 and Round 2.\n"
     "\n"
     "SAFETY\n"
     "- If user targets a protected group, rewrite to systemic terms and add a safety flag.\n"
@@ -347,11 +456,14 @@ def respond(user_text):
     messages.append({"role": "user", "content": user_text})
 
     r = client.responses.create(
-        model=MODEL,
-        input=messages,
-        temperature=TEMPERATURE,
-        max_output_tokens=MAX_TOKENS,
-        store=False
+    model=MODEL,
+    input=messages,
+    temperature=ROUND_TEMPS.get(current_round, 0.6),
+    top_p=ROUND_TOPP.get(current_round, 0.9),
+    frequency_penalty=FREQ_PENALTY,
+    presence_penalty=PRES_PENALTY,
+    max_output_tokens=ROUND_MAXTOK.get(current_round, 200),
+    store=False
     )
 
 
@@ -464,14 +576,14 @@ for t in st.session_state.turns:
     role = t["role"]
     content = t["content"]
     label = "You" if role == "user" else "AI"
-    with st.chat_message(role, avatar="🧑" if role == "user" else "🤖"):
+    with st.chat_message(role, avatar="🧑" if role == "user" else "💬"):
         st.markdown(f"**{label}:** {content}")
 
 if render_input:
     # Use a form so the page doesn't rerun on every keystroke
     with st.form("chat_form", clear_on_submit=True):
         placeholder = (
-            "Share a political issue you care about and include a personal anecdote (e.g., how rising inflation is affecting your budget)."
+            "Please briefly describe a political or social issue that you care strongly about, and explain why it is important to you. Include any personal experience or anecdotal evidence that makes this issue especially significant to you."
             if len([t for t in st.session_state.turns if t['role'] == 'user']) == 0
             else "Write your response."
         )
@@ -487,7 +599,7 @@ if render_input:
     user_text = user_text_area.strip() if (submitted and user_text_area) else None
 else:
     user_text = None
-    st.info("Thank you for participating! This pilot is limited to 3 model replies. You can refresh to start a new session.")
+    st.info("Thank you for participating! This pilot is limited to 3 model replies.")
 
 # Handle a new user message
 if user_text:
