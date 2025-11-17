@@ -14,6 +14,7 @@ from pathlib import Path
 import random
 import gspread
 from google.oauth2.service_account import Credentials
+from gspread.exceptions import APIError, WorksheetNotFound
 
 # ---- Load populist style examples ----
 try:
@@ -86,6 +87,9 @@ def safe_append_csv(path, row_dict, columns, retries=6, delay=0.25):
     st.warning("Could not write to the log file due to file lock.")
     return False
 
+st.set_page_config(page_title="Research Pilot!", page_icon="🗒️")
+st.title("Welcome!")
+
 # Hide detailed error tracebacks in the UI
 st.set_option("client.showErrorDetails", False)
 
@@ -96,51 +100,67 @@ if not OPENAI_API_KEY:
     st.stop()
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# --- Google Sheets client ---
-GOOGLE_SA_JSON = st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON")
-GSHEETS_SPREADSHEET_ID = st.secrets.get("GSHEETS_SPREADSHEET_ID", "")   # preferred
-GSHEETS_DOC_NAME = st.secrets.get("GSHEETS_DOC_NAME", "master_logs")    # fallback open by name
-GSHEETS_WORKSHEET = st.secrets.get("GSHEETS_WORKSHEET", "master_logs")  # tab name in the sheet
+# --- Google Sheets (cached) ---
+@st.cache_resource(show_spinner=False)
+def get_ws():
+    GOOGLE_SA_JSON = st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if not GOOGLE_SA_JSON:
+        st.error("Missing GOOGLE_SERVICE_ACCOUNT_JSON in secrets.")
+        st.stop()
 
-if not GOOGLE_SA_JSON:
-    st.error("Missing GOOGLE_SERVICE_ACCOUNT_JSON in secrets.")
-    st.stop()
+    SCOPES = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    creds = Credentials.from_service_account_info(json.loads(GOOGLE_SA_JSON), scopes=SCOPES)
+    gc = gspread.authorize(creds)
 
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-]
+    GSHEETS_SPREADSHEET_ID = st.secrets.get("GSHEETS_SPREADSHEET_ID", "")
+    GSHEETS_DOC_NAME      = st.secrets.get("GSHEETS_DOC_NAME", "master_logs")
+    GSHEETS_WORKSHEET     = st.secrets.get("GSHEETS_WORKSHEET", "master_logs")
 
-creds = Credentials.from_service_account_info(json.loads(GOOGLE_SA_JSON), scopes=SCOPES)
-gc = gspread.authorize(creds)
+    # Open the spreadsheet once
+    try:
+        sh = gc.open_by_key(GSHEETS_SPREADSHEET_ID) if GSHEETS_SPREADSHEET_ID else gc.open(GSHEETS_DOC_NAME)
+    except Exception as e:
+        st.error(f"Could not open Google Sheet: {e}")
+        st.stop()
 
-# Open the spreadsheet
-try:
-    if GSHEETS_SPREADSHEET_ID:
-        sh = gc.open_by_key(GSHEETS_SPREADSHEET_ID)
-    else:
-        sh = gc.open(GSHEETS_DOC_NAME)
-except Exception as e:
-    st.error(f"Could not open Google Sheet: {e}")
-    st.stop()
+    # Get or create the worksheet once
+    try:
+        ws = sh.worksheet(GSHEETS_WORKSHEET)
+    except WorksheetNotFound:
+        ws = sh.add_worksheet(title=GSHEETS_WORKSHEET, rows="1", cols=str(len(LOG_COLUMNS)))
+        ws.append_row(LOG_COLUMNS, value_input_option="RAW")
 
-# Ensure worksheet exists and has headers
-try:
-    ws = sh.worksheet(GSHEETS_WORKSHEET)
-except gspread.exceptions.WorksheetNotFound:
-    ws = sh.add_worksheet(title=GSHEETS_WORKSHEET, rows="1", cols=str(len(LOG_COLUMNS)))
-    ws.append_row(LOG_COLUMNS, value_input_option="RAW")
+    return ws
+
+# Use the cached worksheet everywhere below
+ws = get_ws()
 
 # Helper to append one conversation row to Google Sheets
 def append_convo_to_gsheet(row_dict: dict):
-    """Append a single conversation row (dict) to the Google Sheet."""
+    """Append a single conversation row (dict) to the Google Sheet with retries/backoff."""
     values = [row_dict.get(k, "") for k in LOG_COLUMNS]
-    try:
-        ws.append_row(values, value_input_option="RAW")
-        return True
-    except Exception as e:
-        st.warning(f"GSheets logging issue: {e}")
-        return False
+    backoff = 0.5
+    for attempt in range(6):  # ~0.5 + 1 + 2 + 4 + 8 + 16 = ~31.5s worst-case
+        try:
+            ws.append_row(values, value_input_option="RAW")
+            return True
+        except APIError as e:
+            msg = str(e)
+            if "Quota exceeded" in msg or "429" in msg:
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            else:
+                st.warning(f"GSheets logging issue: {e}")
+                return False
+        except Exception as e:
+            st.warning(f"GSheets logging issue: {e}")
+            return False
+    st.warning("GSheets logging skipped due to temporary quota pressure (will try next conversation).")
+    return False
 
 
 # Fixed generation settings. Vary them by round 
@@ -151,9 +171,6 @@ ROUND_MAXTOK = {1: 220, 2: 120, 3: 180}
 # Small penalties reduce repetition (this is optional)
 FREQ_PENALTY = 0.2
 PRES_PENALTY = 0.2
-       
-st.set_page_config(page_title="Research Pilot!", page_icon="🗒️")
-st.title("Welcome!")
 
 CONSENT_CSS = """
 <style>
@@ -620,7 +637,7 @@ if render_input:
     user_text = user_text_area.strip() if (submitted and user_text_area) else None
 else:
     user_text = None
-    st.info("Thank you for participating! This pilot is limited to 3 model replies.")
+    st.info("Thank you for participating!")
 
 # Handle a new user message
 if user_text:
@@ -655,5 +672,3 @@ if st.session_state.rounds_done >= 3:
         )
         st.link_button("Open demographics survey", qid_link, type="primary")
         st.caption("The survey opens in a new tab. You can close it when you're done.")
-
-    st.rerun()
