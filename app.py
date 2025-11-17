@@ -152,25 +152,51 @@ ROUND_MAXTOK = {1: 220, 2: 120, 3: 180}
 FREQ_PENALTY = 0.2
 PRES_PENALTY = 0.2
        
-st.set_page_config(page_title="Welcome!", page_icon="🗒️")
+st.set_page_config(page_title="Research Pilot!", page_icon="🗒️")
 st.title("Welcome!")
 
 CONSENT_CSS = """
 <style>
+/* Make the iframe content look like Streamlit */
+html, body {
+  margin: 0;
+  padding: 0;
+  /* Hide any internal scrollbars in the iframe */
+  overflow: hidden;
+  /* Streamlit-like system font stack */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+               Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue",
+               Arial, sans-serif;
+}
+
+/* Theme-aware text color */
+@media (prefers-color-scheme: dark) {
+  .consent-card { color: rgba(250, 250, 250, 0.87); }
+}
+@media (prefers-color-scheme: light) {
+  .consent-card { color: #262730; } /* Streamlit-ish dark text */
+}
+
 .consent-card{
   font-size: 1.0rem;
   line-height: 1.45;
-  padding: 12px 0;     
+  padding: 12px 0;
   margin-top: 6px;
+  background: transparent;      /* no background so it sits on page cleanly */
 }
+
 .consent-card h3{
   font-size: 1.1rem;
   margin: 0 0 6px 0;
   font-weight: 600;
 }
+
 .consent-card .section{ margin: 8px 0 10px; }
 .consent-card ul{ margin: 6px 0 0 20px; }
 .consent-card li{ margin: 3px 0; }
+
+/* Make links (if any) follow the text color */
+.consent-card a { color: inherit; text-decoration: underline; }
 </style>
 """
 
@@ -192,7 +218,7 @@ CONSENT_HTML = """
 </div>
 """
 
-st_html(CONSENT_CSS + CONSENT_HTML, height=280, scrolling=True)
+st_html(CONSENT_CSS + CONSENT_HTML, height=300, scrolling=False)
 
 agree = st.checkbox("I consent to participate in this research project and understand the conversation is logged anonymously.")
 if not agree:
