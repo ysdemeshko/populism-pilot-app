@@ -637,4 +637,23 @@ if user_text:
 
     # Advance round counter 
     st.session_state.rounds_done = min(3, st.session_state.rounds_done + 1)
+
+# If the 3 assistant replies are complete, show the Qualtrics link
+if st.session_state.rounds_done >= 3:
+    qualtrics_base = st.secrets.get("QUALTRICS_URL")
+    if not qualtrics_base:
+        st.warning("QUALTRICS_URL missing from secrets. Add it to .streamlit/secrets.toml.")
+    else:
+        # pass conv_id so Qualtrics can store it in Embedded Data
+        qid_link = f"{qualtrics_base}?conv_id={st.session_state.conv_id}"
+        st.divider()
+        st.subheader("Optional demographics survey")
+        st.write(
+            "Thanks for participating! "
+            "Please fill out a short demographics survey. "
+            "It will record the same session ID so we can match responses anonymously. "
+        )
+        st.link_button("Open demographics survey", qid_link, type="primary")
+        st.caption("The survey opens in a new tab. You can close it when you're done.")
+
     st.rerun()
