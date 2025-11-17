@@ -474,30 +474,32 @@ def respond(user_text):
     # Current user input
     messages.append({"role": "user", "content": user_text})
 
-    r = client.responses.create(
+    r = client.chat.completions.create(
     model=MODEL,
-    input=messages,
+    messages=messages,
     temperature=ROUND_TEMPS.get(current_round, 0.6),
     top_p=ROUND_TOPP.get(current_round, 0.9),
     frequency_penalty=FREQ_PENALTY,
     presence_penalty=PRES_PENALTY,
-    max_output_tokens=ROUND_MAXTOK.get(current_round, 200),
-    store=False
+    max_tokens=ROUND_MAXTOK.get(current_round, 200)
     )
+
+    text = ""
+    try:
+        text = r.choices[0].message.content or ""
+    except Exception:
+        text = ""
+    text = text.strip()
 
 
     # Parse the text
-    text = getattr(r, "output_text", None)
-    if not text:
-        try:
-            text = r.output[0].content[0].text
-        except Exception:
-            text = ""
-    text = (text or "").strip()
+    # Strip code fences if the model wrapped JSON
     if text.startswith("```"):
         lines = text.splitlines()
         if lines and lines[-1].strip().startswith("```"):
             text = "\n".join(lines[1:-1]).strip()
+
+    # Try to pull a JSON object from the string
     start, end = text.find("{"), text.rfind("}")
     if start != -1 and end != -1 and end > start:
         try:
