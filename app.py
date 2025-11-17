@@ -596,7 +596,7 @@ render_input = st.session_state.rounds_done < 3
 for t in st.session_state.turns:
     role = t["role"]
     content = t["content"]
-    label = "You" if role == "user" else "AI"
+    label = "You" if role == "user" else "Response"
     with st.chat_message(role, avatar="🧑" if role == "user" else "💬"):
         st.markdown(f"**{label}:** {content}")
 
