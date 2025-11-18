@@ -177,7 +177,7 @@ def append_convo_to_gsheet(row_dict: dict):
 # Fixed generation settings. Vary them by round 
 ROUND_TEMPS = {1: 0.60, 2: 0.45, 3: 0.55}
 ROUND_TOPP  = {1: 0.95, 2: 0.9,  3: 0.9}
-ROUND_MAXTOK = {1: 220, 2: 180, 3: 140}
+ROUND_MAXTOK = {1: 220, 2: 180, 3: 110}
 
 # Small penalties reduce repetition (this is optional)
 FREQ_PENALTY = 0.2
