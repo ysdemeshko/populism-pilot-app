@@ -616,6 +616,10 @@ rounds_left = max(0, 3 - st.session_state.rounds_done)
 st.caption(f"Rounds remaining: {rounds_left}")
 render_input = st.session_state.rounds_done < 3 
 
+# Instructions
+if render_input:
+    st.info("**Instructions:** Please briefly describe a political or social issue that you care strongly about, and explain why it is important to you. Include any personal experience or anecdotal evidence that makes this issue especially significant to you.")
+
 # Show the transcript so far in chat bubbles
 for t in st.session_state.turns:
     role = t["role"]
@@ -628,7 +632,7 @@ if render_input:
     # Use a form so the page doesn't rerun on every keystroke
     with st.form("chat_form", clear_on_submit=True):
         placeholder = (
-            "Please briefly describe a political or social issue that you care strongly about, and explain why it is important to you. Include any personal experience or anecdotal evidence that makes this issue especially significant to you."
+            "Write your response here."
             if len([t for t in st.session_state.turns if t['role'] == 'user']) == 0
             else "Write your response."
         )
