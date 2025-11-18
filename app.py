@@ -618,7 +618,7 @@ render_input = st.session_state.rounds_done < 3
 
 # Instructions
 if render_input:
-    st.info("**Instructions:** Please briefly describe a political or social issue that you care strongly about, and explain why it is important to you. Include any personal experience or anecdotal evidence that makes this issue especially significant to you.")
+    st.info("**Instructions:** You are asked to take part in a 3-round conversation below. To start, please briefly describe a political or social issue that you care strongly about, and explain why it is important to you. Include any personal experience or anecdotal evidence that makes this issue especially significant to you.")
 
 # Show the transcript so far in chat bubbles
 for t in st.session_state.turns:
