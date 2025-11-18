@@ -16,6 +16,17 @@ import gspread
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import APIError, WorksheetNotFound
 
+# Lightweight healthcheck to keep the app awake
+try:
+    params = st.query_params  # Streamlit >= 1.29
+except Exception:
+    params = st.experimental_get_query_params()  # older Streamlit fallback
+
+if str(params.get("ping", ["0"])[0]) == "1":
+    st.write("ok")
+    st.stop()
+# end healthcheck
+
 # ---- Load populist style examples ----
 try:
     df_pop = pd.read_csv("populist_sentences.csv")
@@ -166,7 +177,7 @@ def append_convo_to_gsheet(row_dict: dict):
 # Fixed generation settings. Vary them by round 
 ROUND_TEMPS = {1: 0.60, 2: 0.45, 3: 0.55}
 ROUND_TOPP  = {1: 0.95, 2: 0.9,  3: 0.9}
-ROUND_MAXTOK = {1: 220, 2: 120, 3: 180}
+ROUND_MAXTOK = {1: 220, 2: 180, 3: 140}
 
 # Small penalties reduce repetition (this is optional)
 FREQ_PENALTY = 0.2
@@ -531,7 +542,7 @@ def respond(user_text):
     if current_round in (1, 2):
         # Require exactly one short question; if missing, append a neutral one.
         if "?" not in reply:
-            add_q = " What part of this has affected your day-to-day the most?"
+            add_q = " What part of this has affected your or somebody you know day-to-day the most?"
             reply = (reply.rstrip(". ").strip() + add_q).strip()
         # Normalize multiple question marks
         reply = re.sub(r"\?{2,}", "?", reply)
@@ -661,12 +672,12 @@ if st.session_state.rounds_done >= 3:
         # pass conv_id so Qualtrics can store it in Embedded Data
         qid_link = f"{qualtrics_base}?conv_id={st.session_state.conv_id}"
         st.divider()
-        st.subheader("Optional demographics survey")
+        st.subheader("Follow-Up Survey")
         st.write(
             "Thanks for participating! "
-            "Please fill out a short demographics survey. "
-            "It will record the same session ID so we can match responses anonymously. "
+            "Please fill out a short follow-up survey. "
+            "It will record your responses anonymously. "
         )
-        st.link_button("Open demographics survey", qid_link, type="primary")
+        st.link_button("Access the Survey Here", qid_link, type="primary")
         st.caption("The survey opens in a new tab. You can close it when you're done.")
 
