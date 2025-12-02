@@ -622,7 +622,7 @@ if render_input:
 
 # Instructions note #2
 if render_input:
-    st.info("**Instructions Note:** The chat may take a few seconds to load the answer. Do **not** refresh the page. We recommend you fill out the survey on your computer.")
+    st.info("**Instructions Note:** The chat may take a few seconds to load the answer. Do **not** refresh the page.")
 
 # Show the transcript so far in chat bubbles
 for t in st.session_state.turns:
