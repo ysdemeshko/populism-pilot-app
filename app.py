@@ -68,6 +68,7 @@ MASTER_LOG_PATH = LOG_DIR / "master_logs.csv"
 # One-row-per-conversation schema
 LOG_COLUMNS = [
     "conversation_id",
+    "condition", 
     "ts_iso_start",
     "ts_iso_end",
     "user_r1", "ai_r1",
@@ -75,6 +76,8 @@ LOG_COLUMNS = [
     "user_r3", "ai_r3",
     "flags_all",
 ]
+
+CONDITION = "populist"
 
 # Create file with header if missing
 if not MASTER_LOG_PATH.exists():
@@ -210,6 +213,7 @@ def init_conversation(force: bool = False):
         st.session_state.fewshot_added = False
         st.session_state.convo_row = {
             "conversation_id": st.session_state.conv_id,
+            "condition": CONDITION,
             "ts_iso_start": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(st.session_state.start_ts)),
             "ts_iso_end": "",
             "user_r1": "", "ai_r1": "",
