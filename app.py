@@ -183,77 +183,6 @@ ROUND_MAXTOK = {1: 220, 2: 180, 3: 110}
 FREQ_PENALTY = 0.2
 PRES_PENALTY = 0.2
 
-CONSENT_CSS = """
-<style>
-/* Make the iframe content look like Streamlit */
-html, body {
-  margin: 0;
-  padding: 0;
-  /* Hide any internal scrollbars in the iframe */
-  overflow: hidden;
-  /* Streamlit-like system font stack */
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
-               Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue",
-               Arial, sans-serif;
-}
-
-/* Theme-aware text color */
-@media (prefers-color-scheme: dark) {
-  .consent-card { color: rgba(250, 250, 250, 0.87); }
-}
-@media (prefers-color-scheme: light) {
-  .consent-card { color: #262730; } /* Streamlit-ish dark text */
-}
-
-.consent-card{
-  font-size: 1.0rem;
-  line-height: 1.45;
-  padding: 12px 0;
-  margin-top: 6px;
-  background: transparent;      /* no background so it sits on page cleanly */
-}
-
-.consent-card h3{
-  font-size: 1.1rem;
-  margin: 0 0 6px 0;
-  font-weight: 600;
-}
-
-.consent-card .section{ margin: 8px 0 10px; }
-.consent-card ul{ margin: 6px 0 0 20px; }
-.consent-card li{ margin: 3px 0; }
-
-/* Make links (if any) follow the text color */
-.consent-card a { color: inherit; text-decoration: underline; }
-</style>
-"""
-
-CONSENT_HTML = """
-<div class="consent-card">
-  <div class="section">
-    <h3>Purpose</h3>
-    <p>This pilot is for research purposes only.</p>
-  </div>
-
-  <div class="section">
-    <h3>About</h3>
-    <ul>
-      <li>Thank you for taking part in this university research pilot run by the University of Southern California. Participation is voluntary; you may exit at any time.</li>
-      <li>Please do not share names, addresses, or any other personally identifiable information. We log anonymous data and results may be used for academic research.</li>
-      <li>Estimated time: 3–5 minutes.</li>
-    </ul>
-  </div>
-</div>
-"""
-
-st_html(CONSENT_CSS + CONSENT_HTML, height=300, scrolling=False)
-
-agree = st.checkbox("I consent to participate in this research project and understand the conversation is logged anonymously.")
-if not agree:
-    st.stop()
-
-# Persist consent for this session (used by log_event function)
-st.session_state.consent_given = bool(agree)
 
 CUSTOM_CSS = """
 <style>
@@ -570,9 +499,6 @@ def log_event(role, content, meta=None):
     # Always keep the on-screen transcript
     st.session_state.turns.append({"role": role, "content": content})
 
-    if not st.session_state.get("consent_given", False):
-        return
-
     meta = meta or {}
     flags = meta.get("flags") or meta.get("safety_flags") or []
     if isinstance(flags, str):
@@ -615,14 +541,6 @@ st.subheader("Conversation (3 rounds total)")
 rounds_left = max(0, 3 - st.session_state.rounds_done)
 st.caption(f"Rounds remaining: {rounds_left}")
 render_input = st.session_state.rounds_done < 3 
-
-# Instructions
-if render_input:
-    st.info("**Instructions:** You are asked to take part in a 3-round conversation below. To start, please briefly describe a political or social issue that you care strongly about, and explain why it is important to you. Include any personal experience or anecdotal evidence that makes this issue especially significant to you.")
-
-# Instructions note #2
-if render_input:
-    st.info("**Instructions Note:** The chat may take a few seconds to load the answer. Do **not** refresh the page.")
 
 # Show the transcript so far in chat bubbles
 for t in st.session_state.turns:
@@ -670,22 +588,4 @@ if user_text:
     # Advance round counter 
     st.session_state.rounds_done = min(3, st.session_state.rounds_done + 1)
     st.rerun()
-
-# If the 3 assistant replies are complete, show the Qualtrics link
-if st.session_state.rounds_done >= 3:
-    qualtrics_base = st.secrets.get("QUALTRICS_URL")
-    if not qualtrics_base:
-        st.warning("QUALTRICS_URL missing from secrets. Add it to .streamlit/secrets.toml.")
-    else:
-        # pass conv_id so Qualtrics can store it in Embedded Data
-        qid_link = f"{qualtrics_base}?conv_id={st.session_state.conv_id}"
-        st.divider()
-        st.subheader("Follow-Up Survey")
-        st.write(
-            "Thanks for participating! "
-            "Please fill out a short follow-up survey. "
-            "It will record your responses anonymously. "
-        )
-        st.link_button("Access the Survey Here", qid_link, type="primary")
-        st.caption("The survey opens in a new tab. You can close it when you're done.")
 
