@@ -99,7 +99,7 @@ def safe_append_csv(path, row_dict, columns, retries=6, delay=0.25):
     return False
 
 st.set_page_config(page_title="Research Pilot!", page_icon="🗒️")
-st.title("Welcome!")
+#st.title("Welcome!")
 
 # Hide detailed error tracebacks in the UI
 st.set_option("client.showErrorDetails", False)
